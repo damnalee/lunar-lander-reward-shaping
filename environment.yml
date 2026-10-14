@@ -1,0 +1,9 @@
+name: lunar
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - swig          # needed to build the Box2D physics engine
+  - pip
+  - pip:
+      - -r requirements.txt

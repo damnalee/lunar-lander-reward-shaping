@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lunar Lander · Reward Shaping with PPO</title>
+<meta name="viewport" content="width=1280">
+<style>
+  :root {
+    --bg0: #04060d;
+    --bg1: #0a1128;
+    --ink: #e8eefc;
+    --dim: #8e9bc0;
+    --cyan: #3de0ff;
+    --amber: #ffb547;
+    --red: #ff5d73;
+    --green: #4ef0a8;
+    --card: rgba(255, 255, 255, 0.05);
+    --line: rgba(160, 190, 255, 0.18);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; background: var(--bg0); overflow: hidden; }
+  body { font-family: var(--sans); color: var(--ink); }
+
+  .poster {
+    position: relative; width: 1280px; height: 640px; overflow: hidden;
+    background:
+      radial-gradient(900px 420px at 82% 8%, rgba(61, 224, 255, 0.16), transparent 60%),
+      radial-gradient(700px 400px at 5% 100%, rgba(255, 181, 71, 0.10), transparent 60%),
+      linear-gradient(160deg, var(--bg1) 0%, var(--bg0) 70%);
+  }
+  /* star field */
+  .stars {
+    position: absolute; inset: 0; opacity: 0.9;
+    background-image:
+      radial-gradient(1.4px 1.4px at 8% 12%, #fff, transparent),
+      radial-gradient(1px 1px at 17% 41%, #cfe3ff, transparent),
+      radial-gradient(1.6px 1.6px at 27% 8%, #fff, transparent),
+      radial-gradient(1px 1px at 36% 63%, #cfe3ff, transparent),
+      radial-gradient(1.2px 1.2px at 46% 22%, #fff, transparent),
+      radial-gradient(1px 1px at 55% 51%, #cfe3ff, transparent),
+      radial-gradient(1.5px 1.5px at 63% 10%, #fff, transparent),
+      radial-gradient(1px 1px at 71% 35%, #cfe3ff, transparent),
+      radial-gradient(1.3px 1.3px at 79% 18%, #fff, transparent),
+      radial-gradient(1px 1px at 88% 47%, #cfe3ff, transparent),
+      radial-gradient(1.6px 1.6px at 94% 9%, #fff, transparent),
+      radial-gradient(1px 1px at 12% 74%, #cfe3ff, transparent),
+      radial-gradient(1.2px 1.2px at 91% 70%, #fff, transparent),
+      radial-gradient(1px 1px at 52% 78%, #cfe3ff, transparent);
+  }
+  .grid {
+    position: absolute; inset: 0; opacity: 0.35;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 55%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0%, #000 55%, transparent 100%);
+  }
+
+  /* ---------- left column ---------- */
+  .left { position: absolute; left: 56px; top: 44px; width: 640px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--cyan); display: flex; gap: 10px; align-items: center;
+  }
+  .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+  h1 {
+    margin-top: 14px; font-size: 76px; line-height: 0.98; font-weight: 800; letter-spacing: -0.03em;
+  }
+  h1 span {
+    background: linear-gradient(90deg, var(--cyan), #8f9bff 60%, var(--amber));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin-top: 16px; font-size: 19px; line-height: 1.4; color: #c6d2f0; max-width: 640px; }
+  .sub b { color: var(--amber); font-weight: 600; }
+
+  .features { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px 22px; }
+  .feat { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.35; color: #d6defa; }
+  .feat i {
+    flex: none; margin-top: 2px; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--cyan);
+    display: inline-block; position: relative; background: rgba(61, 224, 255, 0.10);
+  }
+  .feat i::after { content: ""; position: absolute; left: 5px; top: 1px; width: 4px; height: 9px; border: solid var(--cyan); border-width: 0 2px 2px 0; transform: rotate(40deg); }
+
+  .stats { position: absolute; right: 24px; top: 428px; width: 520px; display: flex; gap: 10px; }
+  .stat { flex: 1; padding: 10px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+  .stat .n { font-family: var(--mono); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+  .stat .l { margin-top: 3px; font-size: 10.5px; letter-spacing: 0.05em; color: var(--dim); text-transform: uppercase; white-space: nowrap; }
+  .stat.good .n { color: var(--green); }
+  .stat.bad .n { color: var(--red); }
+  .stat.neutral .n { color: var(--cyan); }
+
+  /* ---------- right: scene ---------- */
+  .scene { position: absolute; right: 24px; top: 20px; width: 520px; height: 400px; }
+
+  /* ---------- bottom: pipeline ---------- */
+  .pipe-wrap { position: absolute; left: 56px; right: 56px; bottom: 30px; }
+  .pipe-title { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); margin-bottom: 9px; }
+  .pipe { display: flex; align-items: stretch; gap: 0; }
+  .node {
+    flex: 1; padding: 11px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line);
+    min-height: 66px;
+  }
+  .node .t { font-size: 14.5px; font-weight: 700; }
+  .node .d { margin-top: 3px; font-family: var(--mono); font-size: 11px; color: var(--dim); line-height: 1.35; white-space: nowrap; }
+  .node.hot { border-color: rgba(255, 181, 71, 0.55); background: rgba(255, 181, 71, 0.07); }
+  .node.hot .t { color: var(--amber); }
+  .node.env .t { color: var(--cyan); }
+  .node.ok { border-color: rgba(78, 240, 168, 0.5); background: rgba(78, 240, 168, 0.06); }
+  .node.ok .t { color: var(--green); }
+  .arrow { flex: none; width: 34px; display: flex; align-items: center; justify-content: center; color: var(--dim); font-family: var(--mono); font-size: 18px; }
+
+  .badge-row { position: absolute; right: 56px; top: 442px; display: none; }
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="stars"></div>
+  <div class="grid"></div>
+
+  <!-- left column -->
+  <div class="left">
+    <div class="eyebrow"><span class="dot"></span>Reinforcement learning · PPO · Reward shaping</div>
+    <h1>Lunar Lander<br><span>Reward Lab</span></h1>
+    <p class="sub">Train a neural network to land a rocket from eight numbers, then <b>break it on purpose</b> with a bad reward and fix it.</p>
+
+    <div class="features">
+      <div class="feat"><i></i>PPO agent trained from scratch on a laptop, no GPU</div>
+      <div class="feat"><i></i>Custom reward wrapper with four switchable modes</div>
+      <div class="feat"><i></i>Reward hacking demo: the rocket learns to hover</div>
+      <div class="feat"><i></i>Honest evaluation with the wrapper switched off</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat good"><div class="n">237.0</div><div class="l">Avg reward &middot; solved</div></div>
+    <div class="stat bad"><div class="n">&minus;52.3</div><div class="l">Hover exploit</div></div>
+    <div class="stat neutral"><div class="n">9.7 min</div><div class="l">1M frames &middot; M2 Air</div></div>
+  </div>
+
+  <!-- right column: illustration -->
+  <svg class="scene" viewBox="0 0 520 400" xmlns="http://www.w3.org/2000/svg" aria-label="Rocket descending to a landing pad">
+    <defs>
+      <radialGradient id="moon" cx="35%" cy="30%" r="80%">
+        <stop offset="0" stop-color="#2a3560"/><stop offset="1" stop-color="#0c1230"/>
+      </radialGradient>
+      <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff3c4"/><stop offset="0.5" stop-color="#ffb547"/><stop offset="1" stop-color="#ff5d73" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="hull" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#cfd9f5"/><stop offset="1" stop-color="#7f8fc0"/>
+      </linearGradient>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+    </defs>
+
+    <!-- planet limb -->
+    <ellipse cx="260" cy="520" rx="420" ry="190" fill="url(#moon)" stroke="rgba(160,190,255,0.25)"/>
+    <!-- craters -->
+    <ellipse cx="90" cy="372" rx="30" ry="7" fill="none" stroke="rgba(160,190,255,0.25)"/>
+    <ellipse cx="430" cy="368" rx="40" ry="8" fill="none" stroke="rgba(160,190,255,0.22)"/>
+
+    <!-- landing pad + flags -->
+    <rect x="200" y="348" width="120" height="6" rx="3" fill="#ffb547"/>
+    <rect x="196" y="354" width="128" height="3" fill="rgba(255,181,71,0.35)"/>
+    <line x1="204" y1="348" x2="204" y2="312" stroke="#e8eefc" stroke-width="2"/>
+    <polygon points="204,312 224,319 204,326" fill="#ff5d73"/>
+    <line x1="316" y1="348" x2="316" y2="312" stroke="#e8eefc" stroke-width="2"/>
+    <polygon points="316,312 296,319 316,326" fill="#ff5d73"/>
+
+    <!-- learned trajectory (landing) -->
+    <path d="M60 40 C 120 70, 90 150, 175 190 S 260 220, 262 252" fill="none" stroke="#4ef0a8" stroke-width="2.5" stroke-dasharray="3 7" stroke-linecap="round" opacity="0.9"/>
+    <circle cx="60" cy="40" r="4" fill="#4ef0a8"/>
+    <text x="72" y="36" fill="#4ef0a8" font-family="ui-monospace, Menlo, monospace" font-size="12">trained policy</text>
+
+    <!-- hover exploit loop -->
+    <path d="M360 120 C 420 90, 470 130, 440 170 S 370 190, 360 150 S 400 100, 450 120" fill="none" stroke="#ff5d73" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round" opacity="0.9"/>
+    <text x="372" y="214" fill="#ff5d73" font-family="ui-monospace, Menlo, monospace" font-size="12">reward hack: hover</text>
+
+    <!-- lander -->
+    <g transform="translate(262 296)">
+      <ellipse cx="0" cy="62" rx="26" ry="9" fill="url(#flame)" filter="url(#glow)" opacity="0.9"/>
+      <path d="M-9 36 L0 66 L9 36 Z" fill="url(#flame)"/>
+      <!-- legs -->
+      <path d="M-18 22 L-34 46 M18 22 L34 46" stroke="#aab7e0" stroke-width="3" stroke-linecap="round"/>
+      <path d="M-40 47 H-28 M28 47 H40" stroke="#e8eefc" stroke-width="3" stroke-linecap="round"/>
+      <!-- body -->
+      <path d="M-20 22 L-24 -6 Q0 -34 24 -6 L20 22 Z" fill="url(#hull)" stroke="#e8eefc" stroke-opacity="0.5"/>
+      <rect x="-18" y="22" width="36" height="10" rx="3" fill="#5f6ea3"/>
+      <circle cx="0" cy="-6" r="8" fill="#0a1128" stroke="#3de0ff" stroke-width="2"/>
+      <circle cx="-2" cy="-8" r="2.4" fill="#3de0ff" opacity="0.8"/>
+    </g>
+
+    <!-- observation callout -->
+    <g font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#8e9bc0">
+      <rect x="18" y="262" width="132" height="92" rx="10" fill="rgba(255,255,255,0.05)" stroke="rgba(160,190,255,0.2)"/>
+      <text x="30" y="282" fill="#3de0ff">obs = [8 numbers]</text>
+      <text x="30" y="300">x, y</text>
+      <text x="30" y="316">vx, vy</text>
+      <text x="30" y="332">tilt, spin</text>
+      <text x="30" y="348">leg L, leg R</text>
+    </g>
+  </svg>
+
+  <!-- bottom: architecture -->
+  <div class="pipe-wrap">
+    <div class="pipe-title">Architecture</div>
+    <div class="pipe">
+      <div class="node env"><div class="t">LunarLander-v3</div><div class="d">Box2D physics · 50 FPS<br>8 inputs · 4 actions</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node hot"><div class="t">Reward wrapper</div><div class="d">none/time/hover/fixed<br>reshapes the score</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="t">PPO · MlpPolicy</div><div class="d">2×64 units · 16 envs<br>small clipped updates</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="t">Trained policy</div><div class="d">models/*.zip<br>engine choice per frame</div></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node ok"><div class="t">Evaluate · wrapper off</div><div class="d">10 episodes · ≥200 solved<br>record the clip</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# ---- OS junk ----
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+Desktop.ini
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+.conda/
+
+# ---- Secrets / local config ----
+.env
+.env.*
+!.env.example
+
+# ---- Editors ----
+.vscode/
+.idea/
+*.swp
+
+# ---- Notebooks ----
+.ipynb_checkpoints/
+
+# ---- Training output ----
+# Raw clips from evaluate.py --record. Copy the good ones into assets/videos/.
+/videos/
+# TensorBoard / log folders
+runs/
+logs/
+tb_logs/
+*.monitor.csv
+# Models: the small final .zip files in models/ ARE committed on purpose
+# (a PPO model with a 64x64 network is a few hundred KB). Ignore stray ones:
+/*.zip
