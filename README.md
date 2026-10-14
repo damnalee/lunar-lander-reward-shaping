@@ -180,7 +180,7 @@ The network is a function with a few thousand adjustable dials (weights). They s
 
 Why `hover` wins over landing: an episode ends at 1,000 frames, so hanging in the air can collect up to 1,000 bonus points while paying at most 300 in fuel (1,000 frames × 0.3). Landing **ends** the episode, which stops the +1 payments. So hovering beats landing, and PPO finds that.
 
-Why `fixed` works: instead of paying for *being* in a good state, it pays for the **change** in a potential `φ` (1 when upright and slow, otherwise 0). Staying in the good state pays `γ·1 − 1 = 0.999 − 1 = −0.001` per frame, which is nothing, so there is nothing to farm. This is *potential-based reward shaping*; it adds guidance without changing which policy is best.
+Why `fixed` works: instead of paying for *being* in a good state, it pays for the **change** in a potential `φ` (1 when upright and slow, otherwise 0). Staying in the good state pays `γ·1 − 1 = 0.999 − 1 = −0.001` per frame, which is nothing, so there is nothing to farm. This is *potential-based reward shaping*: the potential term adds guidance without changing which policy is best. The time fee does change it, on purpose, by making waiting costly.
 
 ---
 
@@ -195,7 +195,7 @@ Why `fixed` works: instead of paying for *being* in a good state, it pays for th
 
 ### `src/random_agent.py`: the "before" picture
 
-Opens the game window and fires random engines (`env.action_space.sample()`). It prints the 8 observation numbers every 25 frames so you can match them to the table above. Typical result: a crash in 70 to 95 frames with a total reward between about -110 and -300.
+Opens the game window and fires random engines (`env.action_space.sample()`). It prints the 8 observation numbers every 25 frames so you can match them to the table above. In my three runs it crashed in 69 to 94 frames with total rewards from about -306 to -110.
 
 ### `src/train.py`: learning
 
@@ -249,8 +249,8 @@ All models were tested on the plain game, wrapper off, deterministic actions, 10
 - **The hover agent never lands.** All 10 episodes hit the 1,000-frame limit, and its mean reward is about 290 points below the baseline.
 - **Hovering is a consistent learned behaviour, not luck.** Every episode behaves the same way.
 - **The fix works.** With potential-based shaping plus a time fee, the same "upright and slow" idea that caused hovering now lands in 10 of 10 episodes, with no timeouts.
-- **The time fee makes landings faster.** Both `time` and `fixed` finish in 289 to 323 steps versus 427 for the baseline. The reward differences between the solved runs (237 to 267) are within about one standard deviation of each other, so this project does not claim one of them scores better, only that they all land.
-- **Training logs and evaluation can disagree.** At the end of baseline training the log showed `ep_rew_mean 141` and `ep_len_mean 974`, yet evaluation gave 237.0 and 427 steps. Training samples actions from the policy (to explore), evaluation always picks the best one, so the greedy policy flies much better. For the hover run the log showed `ep_rew_mean 94.7` and `ep_len_mean 988`, while evaluation gave -52.3 over 1,000 steps. Either way, the long episode length is the warning sign.
+- **The time-fee runs land faster.** In these runs both `time` and `fixed` finish in 289 to 323 steps versus 427 for the baseline. The reward differences between the solved runs (237 to 267) are within about one standard deviation of each other, so this project does not claim one of them scores better, only that they all land.
+- **Training logs cannot tell these runs apart; evaluation can.** At the end of training the baseline log showed `ep_rew_mean 141` and `ep_len_mean 974`, and the hover log showed `ep_rew_mean 94.7` and `ep_len_mean 988`. Those look similar, yet evaluation gives 237.0 with 0/10 timeouts for the baseline and -52.3 with 10/10 timeouts for hover. The training log reflects sampled, exploring actions, while evaluation picks the best action each frame.
 - **Lesson:** judge a reward by evaluation and by watching clips, never by the training curve alone. And run more than one seed before calling a reward good or bad.
 
 ---
@@ -259,7 +259,7 @@ All models were tested on the plain game, wrapper off, deterministic actions, 10
 
 ### Prerequisites
 
-- Python 3.10 or newer (3.12 recommended)
+- Python 3.10 or newer (tested on 3.12)
 - Conda (Anaconda or Miniconda) **or** `python -m venv`
 - Roughly 1 to 2 GB of free disk (PyTorch is the big one)
 - A GPU is **not** needed. Tested on a MacBook Air M2.
